@@ -5,6 +5,21 @@
 
 char* expected_open = NULL;
 
+char* get_filename(char *path)
+{
+        int pos = 0;
+        char *filename,*p;
+        p = path;
+
+        while(*p != '\0') {
+                p++;
+        }
+
+        while(*p != '/')
+                p--;
+        p++;
+        return p;
+}
 // initialise all the global variables
 void lfs_init()
 {
@@ -32,17 +47,26 @@ void lfs_init()
 static int lfs_getattr(const char *path, struct stat *stbuf)
 {
 	int res = 0;
-
+	struct file_inode_hash *s;
+	char *p;
+	p = get_filename(path);
 	memset(stbuf, 0, sizeof(struct stat));
 	if (strcmp(path, "/") == 0) {
 		stbuf->st_mode = S_IFDIR | 0755;
 		stbuf->st_nlink = 2;
-	} else if (expected_open && !strcmp(path, expected_open)) {
-		stbuf->st_mode = S_IFREG | 0755;
-		stbuf->st_nlink = 1;
-	} else
-		res = -ENOENT;
-
+		res = 0;
+		return res;
+	} else {
+		for (s=li->fih; s!=NULL; s=s->hh.next) {
+			if(!strcmp(p, s->f_name) ){		
+				stbuf->st_mode = S_IFREG | 0755;
+				stbuf->st_nlink = 1;
+				res = 0;
+				return res;
+			}
+		}
+	}
+	res = -ENOENT;
 	return res;
 }
 	
@@ -71,6 +95,7 @@ int lfs_create(const char *path, mode_t mode,struct fuse_file_info *fi)
 	struct segsum *ss;
 	int j;
 	struct file_inode_hash *s;
+
 /*
 	HASH_FIND_STR(li->fih,path,s);
 
@@ -89,7 +114,7 @@ int lfs_create(const char *path, mode_t mode,struct fuse_file_info *fi)
 */
 		// add the newly created inode to for given file into the hash table
 		s = (struct file_inode_hash*)malloc(sizeof(struct file_inode_hash));
-		strcpy(s->f_name,path);
+		strcpy(s->f_name,get_filename(path));
 		s->inode_num = 0; //i->ino;
 		HASH_ADD_STR(li->fih,f_name,s);
 /*		
