@@ -3,6 +3,7 @@
 
 #include"segment.h"
 #include"lfs.h"
+
 struct direct_blk {
 	uint16_t seg_num;
 	uint16_t blk_num;

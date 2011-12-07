@@ -1,11 +1,5 @@
-#include<stdlib.h>
-#include<stdio.h>
 #include"lfs.h"
-#include"uthash.h"
-#include"segment.h"
-#include"inode.h"
-#include<unistd.h>
-#include<fuse.h>
+#include "inode.h"
 
 #define FUSE_USE_VERSION	26
 
@@ -25,7 +19,8 @@ void lfs_init()
 
 	// create a file of required size on disk that needs to be used to 
 	// represent the lfs file system.	
-	li->fd		 = open("/home/sphurti/lfslog",O_RDWR|O_CREAT);
+	li->fd		 = open("./lfslog",O_RDWR|O_CREAT|O_TRUNC);
+	assert(li->fd > 0);
 
 	int file_size = (SEG_SIZE * MAX_NUM_SEG + BLKSIZE);
 	char *buf = malloc(file_size);
@@ -56,12 +51,16 @@ static int lfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 {
 	(void) offset;
 	(void) fi;
+	struct file_inode_hash *s;
 
 	if (strcmp(path, "/") != 0)
 		return -ENOENT;
 
 	filler(buf, ".", NULL, 0);
 	filler(buf, "..", NULL, 0);
+	for (s=li->fih; s!=NULL; s=s->hh.next) {
+		filler(buf, s->f_name, NULL, 0);
+	}
 
 	return 0;
 }
@@ -69,11 +68,10 @@ static int lfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 int lfs_create(const char *path, mode_t mode,struct fuse_file_info *fi)
 {
 	expected_open = path;
-/*
-	fprintf(stderr, "\ninside the create func");
 	struct segsum *ss;
 	int j;
 	struct file_inode_hash *s;
+/*
 	HASH_FIND_STR(li->fih,path,s);
 
 	// if the file already exists, do nothing
@@ -88,11 +86,13 @@ int lfs_create(const char *path, mode_t mode,struct fuse_file_info *fi)
 		i->ino = li->n_inode++;
 		i->size = 0;
 		
+*/
 		// add the newly created inode to for given file into the hash table
+		s = (struct file_inode_hash*)malloc(sizeof(struct file_inode_hash));
 		strcpy(s->f_name,path);
-		s->inode_num = i->ino;
+		s->inode_num = 0; //i->ino;
 		HASH_ADD_STR(li->fih,f_name,s);
-		
+/*		
 		//initialise  all the direct blk values to zero
 		for(j = 0; j <= MAX_BLKS_FOR_FILE; j++)
 		{

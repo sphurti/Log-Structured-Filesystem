@@ -9,6 +9,7 @@
 #include<unistd.h>
 #include "segment.h"
 #include"uthash.h"
+#include <assert.h>
 
 #define MAXNAMELEN	128
 #define BLKSIZE		4096
