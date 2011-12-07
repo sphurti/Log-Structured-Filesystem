@@ -58,7 +58,7 @@ void lfs_init();
 
 // file operations
 int lfs_open(const char *path, struct fuse_file_info *fi);
-int lfs_create(const char *path);//, mode_t mode,struct fuse_file_info *fi);
+int lfs_create(const char *path, mode_t mode,struct fuse_file_info *fi);
 int lfs_read(const char *path, char *buf, size_t count, off_t offset,struct fuse_file_info *fi);
 
 //void lfs_close(int fd);

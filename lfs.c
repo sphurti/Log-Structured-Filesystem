@@ -7,7 +7,10 @@
 #include<unistd.h>
 #include<fuse.h>
 
-// -DFUSE_USE_VERSION=22
+#define FUSE_USE_VERSION	26
+
+char* expected_open = NULL;
+
 // initialise all the global variables
 void lfs_init()
 {
@@ -29,10 +32,6 @@ void lfs_init()
 	memset((void*)buf,0,file_size);
 	pwrite(li->fd, buf, file_size,0);
 	free(buf);
-
-//	struct fuse_file_info *fi;
-//	lfs_create("/tmp/fuse/hi");//,O_CREAT,fi);
-	
 }
 
 static int lfs_getattr(const char *path, struct stat *stbuf)
@@ -43,6 +42,9 @@ static int lfs_getattr(const char *path, struct stat *stbuf)
 	if (strcmp(path, "/") == 0) {
 		stbuf->st_mode = S_IFDIR | 0755;
 		stbuf->st_nlink = 2;
+	} else if (expected_open && !strcmp(path, expected_open)) {
+		stbuf->st_mode = S_IFREG | 0755;
+		stbuf->st_nlink = 1;
 	} else
 		res = -ENOENT;
 
@@ -64,8 +66,10 @@ static int lfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	return 0;
 }
 // New file creation
-int lfs_create(const char *path)//, mode_t mode,struct fuse_file_info *fi)
+int lfs_create(const char *path, mode_t mode,struct fuse_file_info *fi)
 {
+	expected_open = path;
+/*
 	fprintf(stderr, "\ninside the create func");
 	struct segsum *ss;
 	int j;
@@ -121,12 +125,14 @@ int lfs_create(const char *path)//, mode_t mode,struct fuse_file_info *fi)
 		
 		li->cur_seg_blk++;
 	}
+*/
 	return 0;
 }
 
 // file open operation
 int lfs_open(const char *path, struct fuse_file_info *fi) 
 {
+/*
 	fprintf(stderr, "\ninside the open func");
 	lfs_create(path);
 	struct file_inode_hash *s;
@@ -136,7 +142,7 @@ int lfs_open(const char *path, struct fuse_file_info *fi)
 		return 0;
 	else
 		return -1;
-
+*/
 }
 
 int lfs_read(const char *path, char *buf, size_t count, off_t offset, struct fuse_file_info *fi)
@@ -150,41 +156,12 @@ static struct fuse_operations lfs_oper = {
     .create	= lfs_create,
     .read	= lfs_read,
 };
-/*
+
 int main(int argc, char *argv[])
 {
     lfs_init();
      
     fprintf(stderr, "\ninside the main func");
     return fuse_main(argc, argv, &lfs_oper,NULL);
-}
-*/
-int main(int argc, char *argv[])
-{
-        struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
-        struct fuse_chan *ch;
-        char *mountpoint;
-        int err = -1;
-
-        if (fuse_parse_cmdline(&args, &mountpoint, NULL, NULL) != -1 &&
-            (ch = fuse_mount(mountpoint, &args)) != NULL) {
-                struct fuse_session *se;
-
-                se = fuse_lowlevel_new(&args, &lfs_oper,
-                                       sizeof(lfs_oper), NULL);
-                if (se != NULL) {
-                        if (fuse_set_signal_handlers(se) != -1) {
-                                fuse_session_add_chan(se, ch);
-                                err = fuse_session_loop(se);
-                                fuse_remove_signal_handlers(se);
-                                fuse_session_remove_chan(ch);
-                        }
-                        fuse_session_destroy(se);
-                }
-                fuse_unmount(mountpoint,ch);
-        }
-        fuse_opt_free_args(&args);
-
-        return err ? 1 : 0;
 }
 
