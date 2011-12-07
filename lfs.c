@@ -58,7 +58,7 @@ static int lfs_getattr(const char *path, struct stat *stbuf)
 		return res;
 	} else {
 		for (s=li->fih; s!=NULL; s=s->hh.next) {
-			if(!strcmp(p, s->f_name) ){		
+			if(!strcmp(p, s->f_name)) {		
 				stbuf->st_mode = S_IFREG | 0755;
 				stbuf->st_nlink = 1;
 				res = 0;
@@ -96,8 +96,10 @@ int lfs_create(const char *path, mode_t mode,struct fuse_file_info *fi)
 	int j;
 	struct file_inode_hash *s;
 
-/*
-	HASH_FIND_STR(li->fih,path,s);
+	printf("\n inside the create func");
+
+
+	HASH_FIND_STR(li->fih,get_filename(path),s);
 
 	// if the file already exists, do nothing
 	if(s != NULL)
@@ -111,13 +113,13 @@ int lfs_create(const char *path, mode_t mode,struct fuse_file_info *fi)
 		i->ino = li->n_inode++;
 		i->size = 0;
 		
-*/
+
 		// add the newly created inode to for given file into the hash table
 		s = (struct file_inode_hash*)malloc(sizeof(struct file_inode_hash));
 		strcpy(s->f_name,get_filename(path));
-		s->inode_num = 0; //i->ino;
+		s->inode_num = i->ino;
 		HASH_ADD_STR(li->fih,f_name,s);
-/*		
+		
 		//initialise  all the direct blk values to zero
 		for(j = 0; j <= MAX_BLKS_FOR_FILE; j++)
 		{
@@ -150,24 +152,23 @@ int lfs_create(const char *path, mode_t mode,struct fuse_file_info *fi)
 		
 		li->cur_seg_blk++;
 	}
-*/
+
 	return 0;
 }
 
 // file open operation
 int lfs_open(const char *path, struct fuse_file_info *fi) 
 {
-/*
+
 	fprintf(stderr, "\ninside the open func");
-	lfs_create(path);
 	struct file_inode_hash *s;
-	HASH_FIND_STR(li->fih,path,s);
+	HASH_FIND_STR(li->fih,get_filename(path),s);
 	
 	if(strcmp(s->f_name,path) != 0)
 		return 0;
 	else
 		return -1;
-*/
+
 }
 
 int lfs_read(const char *path, char *buf, size_t count, off_t offset, struct fuse_file_info *fi)
