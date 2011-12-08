@@ -14,11 +14,12 @@
 #define MAXNAMELEN	128
 #define BLKSIZE		4096
 #define SEG_SIZE	64*BLKSIZE	// size of segment in bytes
-#define MAX_SEG_BLKS	64		// maximum number of blocks per segment
+#define MAX_SEG_BLKS	3		// maximum number of blocks per segment
 #define MAX_NUM_SEG     32		// maximum number of segements
 #define MAX_BLKS_FOR_FILE	1000	// Maximum number of blocks a file  can occupy
 #define MAX_INODES	1024
 
+#define MIN(a,b)	(a < b ? a : b)
 struct inode_map_entry {
 	uint16_t seg_num;
 	uint16_t blk_num;
@@ -29,6 +30,7 @@ struct inode_map_entry {
 struct file_inode_hash {
         char f_name[MAXNAMELEN];
         uint32_t inode_num;
+	uint32_t f_size;
         UT_hash_handle hh;
 };
 
@@ -61,10 +63,12 @@ void lfs_init();
 int lfs_open(const char *path, struct fuse_file_info *fi);
 int lfs_create(const char *path, mode_t mode,struct fuse_file_info *fi);
 int lfs_read(const char *path, char *buf, size_t count, off_t offset,struct fuse_file_info *fi);
+int lfs_write(const char *path, char *buf, int count, int offset, struct fuse_file_info *fi);
 
-//void lfs_close(int fd);
-//void lfs_read(int fd, int size, int offset, char* buf);
-//void lfs_write(int fd, int size, int offset, char* buf);
+// generic functions
+void read_from_disc(int seg_num, int block_num, char *buf, int size, int blk_offset);
+void copy_segmentdata_to_disk(int fd, char * buf, size_t count, off_t offset);
+char* get_filename(char *path);
 
 
 // other functions

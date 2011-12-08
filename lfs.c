@@ -5,6 +5,40 @@
 
 char* expected_open = NULL;
 
+void read_from_disc(int seg_num, int block_num, char *buf, int size, int blk_offset)
+{
+	int *offset;
+	offset = seg_num * SEG_SIZE + block_num * BLKSIZE + BLKSIZE + blk_offset;
+	pread(li->fd, buf, size, offset);
+	return;
+}
+
+void copy_segmentdata_to_disk(int fd, char * buf, size_t count, off_t offset )
+{
+
+	struct segsum *ss = (struct segsum*)(li->cur_seg_buf);	
+	// if this is the last block in segment, write it into disc. 
+	if( li->cur_seg_blk == (SEG_SIZE / BLKSIZE)) 
+	{
+		pwrite(fd, buf, count, offset); 
+
+		// update the bitmap indicating that the segment is not free
+		li->seg_bitmap[li->log_head] = li->seg_bitmap[li->log_head] & ~(1 << li->log_head);
+
+		li->log_head = get_next_free_segment();
+		li->cur_seg_blk = 0;
+
+		// reset the memory buffer to zer0
+		memset((void*)li->cur_seg_buf,0,SEG_SIZE);
+
+		// resetting values for the segment summary entry for new segment
+		ss[0].inode_num = -1;
+		ss[0].logical_blk = -1;
+	}
+	return;
+}
+
+//get the file name from the path
 char* get_filename(char *path)
 {
         int pos = 0;
@@ -20,12 +54,24 @@ char* get_filename(char *path)
         p++;
         return p;
 }
+
+
 // initialise all the global variables
 void lfs_init()
 {
 	li = (struct lfs_global_info*)malloc(sizeof(struct lfs_global_info));
 	//initialise global variables
 	li->cur_seg_buf    = malloc(SEG_SIZE);
+	memset((void*)li->cur_seg_buf,0,SEG_SIZE);
+
+
+	// indicate the presence of segment summary in first block by setting 
+	// inode_num and logical_blk of segment summary entry as -1	
+	struct segsum *ss = (struct segsum*)(li->cur_seg_buf);	
+	ss[0].inode_num = -1;
+	ss[0].logical_blk = -1;
+
+
 	li->fih 	   = NULL;
 	li->cur_seg_blk    = 1;
 	li->log_head	   = 1;
@@ -62,6 +108,7 @@ static int lfs_getattr(const char *path, struct stat *stbuf)
 				stbuf->st_mode = S_IFREG | 0755;
 				stbuf->st_nlink = 1;
 				res = 0;
+				stbuf->st_size = s->f_size;
 				return res;
 			}
 		}
@@ -118,13 +165,14 @@ int lfs_create(const char *path, mode_t mode,struct fuse_file_info *fi)
 		s = (struct file_inode_hash*)malloc(sizeof(struct file_inode_hash));
 		strcpy(s->f_name,get_filename(path));
 		s->inode_num = i->ino;
+		s->f_size = 0;
 		HASH_ADD_STR(li->fih,f_name,s);
 		
 		//initialise  all the direct blk values to zero
 		for(j = 0; j <= MAX_BLKS_FOR_FILE; j++)
 		{
-			i->direct[j].seg_num = 0;
-			i->direct[j].blk_num = 0;
+			i->direct[j].seg_num = -1;
+			i->direct[j].blk_num = -1;
 		}
 
 		
@@ -171,9 +219,175 @@ int lfs_open(const char *path, struct fuse_file_info *fi)
 
 }
 
+
 int lfs_read(const char *path, char *buf, size_t count, off_t offset, struct fuse_file_info *fi)
 {
+	struct inode *i;
+	int readbytes = 0;
+	uint32_t ino;
+	int pos,n,blk;
+
+	// check if the file exists in hash table
+	struct file_inode_hash *s;
+	HASH_FIND_STR(li->fih,get_filename(path),s);
+
+	// if given file is not present , return error	
+	if( s == NULL)
+		return -ENOENT;
+	
+	// store the inode number of the given file in ino variable
+	else 
+		ino = s->inode_num;
+	
+	memset(buf, 0, count);
+	// handle the case where inode is not  in memory buffer
+	if(li->ino_map[ino].seg_num != li->log_head)
+	{
+		 i = (struct inode *) ( li->ino_map[ino].seg_num * SEG_SIZE + li->ino_map[ino].blk_num * BLKSIZE + BLKSIZE);
+		
+		// return zero if the offset of file is greater then file size
+		if(offset >= i->size)
+			return 0;
+		count = MIN(count, i->size - offset);
+		blk = offset/BLKSIZE;
+		read_from_disc(i->direct[blk].seg_num, i->direct[blk].blk_num, buf, count, offset % BLKSIZE);
+	}
+
+	// handling the case when inode of the file being read is in memory buffer
+	else
+	{
+		i = (struct inode *) (li->cur_seg_buf + li->ino_map[ino].blk_num * BLKSIZE);
+		if(offset  >=  i->size)
+			return 0;
+
+		count = MIN(count, i->size - offset);
+		for(pos = offset; pos < offset + count; )
+		{
+			n = MIN(BLKSIZE - pos % BLKSIZE, offset + count - pos);
+			blk = pos/BLKSIZE;
+			
+			/* if current  block is part of memory
+			    move the n byes of data starting from  appropriate 
+			    block into the buffer */
+			if(i->direct[blk].seg_num == li->log_head)
+				memmove(buf,  li->cur_seg_buf + i->direct[blk].blk_num * BLKSIZE+ pos % BLKSIZE, n);
+			
+			// if the current block is on disk, read the data from disk using read system call
+			else
+				read_from_disc(i->direct[blk].seg_num, i->direct[blk].blk_num, buf, n, pos % BLKSIZE);
+
+			pos += n;
+			buf += n;
+		}
+	}
+	return count;
 }
+
+
+
+
+
+int lfs_write(const char *path, char *buf, int count, int offset,struct fuse_file_info *fi)
+{
+	char *ibuf = malloc(BLKSIZE);	
+	struct inode *i;
+	struct segsum *ss = (struct segsum *) li->cur_seg_buf;
+	int pos,blk,segno;
+	uint32_t ino, iaddr ,n;
+	
+	// check if the file exists in hash table
+	struct file_inode_hash *s,*s1;
+	
+	HASH_FIND_STR(li->fih,get_filename(path),s);
+
+	// if given file is not present , return error	
+	if( s == NULL)
+		return -ENOENT;
+	
+	// store the inode number of the given file in ino variable
+	else 
+		ino = s->inode_num;
+
+	if(li->ino_map[ino].seg_num != li->log_head)  
+		read_from_disc(li->ino_map[ino].seg_num, li->ino_map[ino].blk_num, ibuf, BLKSIZE, 0);
+	else
+		memmove(ibuf,  li->cur_seg_buf  + li->ino_map[ino].blk_num * BLKSIZE, BLKSIZE);
+	
+	i = (struct inode *) ibuf;		
+	for(pos = offset; pos < offset + count;)
+	{
+		// no. of bytes to be written in this block either whole block or few
+		n = MIN(BLKSIZE - pos % BLKSIZE, offset + count - pos);
+		blk = pos/BLKSIZE;
+
+		if( pos + n > i->size)
+			i->size = pos + n; 	// update file size accordingly. 
+
+		 // disk address of the block to be written
+		segno = i->direct[blk].seg_num;
+
+		// this block already exists		
+		if(segno != 65535)
+		{	
+			// writing in continution of something already present
+			if( pos % BLKSIZE != 0 )
+			{
+				if( segno == li->log_head) // block is still in memory
+				{				
+					memmove( li->cur_seg_buf + i->direct[blk].blk_num * BLKSIZE, buf, n); 
+					pos += n; // update pos.
+					buf += n;
+					continue;
+  				}
+				else
+					read_from_disc(i->direct[blk].seg_num, i->direct[blk].blk_num, li->cur_seg_buf + li->cur_seg_blk*BLKSIZE, BLKSIZE, 0); 
+			}
+			
+		}
+		
+		// update this block address in inode.
+		i->direct[blk].seg_num  = li-> log_head;
+		i->direct[blk].blk_num = li->cur_seg_blk; 
+
+		// write n bytes into memory buffer  from given buffer buf.
+		memmove( li->cur_seg_buf + li->cur_seg_blk * BLKSIZE, buf, n); 
+
+		//update the summary
+		ss[li->cur_seg_blk].inode_num = ino;
+		ss[li->cur_seg_blk].logical_blk = blk; 
+
+		 // if this is last block in segment write the whole segment into disc.
+		copy_segmentdata_to_disk(li->fd, li->cur_seg_buf, SEG_SIZE, (li->log_head * SEG_SIZE + BLKSIZE));
+
+		li->cur_seg_blk ++; 		
+		pos += n; // update pos.
+		buf += n;
+	}
+	memmove(li->cur_seg_buf + li->cur_seg_blk * BLKSIZE, ibuf, BLKSIZE);
+	// update the inode map.
+	li->ino_map[ino].seg_num = li->log_head; 
+	li->ino_map[ino].blk_num = li->cur_seg_blk;
+
+	//update segment summary for newly changes inode
+	ss[li->cur_seg_blk].inode_num = ino;
+	ss[li->cur_seg_blk].logical_blk = -1;
+
+	// if this is the last block in segment, write it into disc. 
+	copy_segmentdata_to_disk(li->fd, li->cur_seg_buf, SEG_SIZE,(li->log_head * SEG_SIZE + BLKSIZE));
+	li->cur_seg_blk ++; 	
+	
+	// update the hash information corresponding to the file
+	if(s->f_size != i->size) {
+		s1 = (struct file_inode_hash*)malloc(sizeof(struct file_inode_hash));
+		s1->f_size = i->size;
+		strcpy(s1->f_name ,s->f_name);
+		HASH_DEL(li->fih,s);
+		HASH_ADD_STR(li->fih,f_name,s1);
+	}
+	
+	return count;
+}
+
 
 static struct fuse_operations lfs_oper = {
     .getattr	= lfs_getattr,
@@ -181,6 +395,7 @@ static struct fuse_operations lfs_oper = {
     .open	= lfs_open,
     .create	= lfs_create,
     .read	= lfs_read,
+    .write	= lfs_write,
 };
 
 int main(int argc, char *argv[])
@@ -188,6 +403,7 @@ int main(int argc, char *argv[])
     lfs_init();
      
     fprintf(stderr, "\ninside the main func");
+    fprintf(stderr, "\n%08x",li->cur_seg_buf);    
     return fuse_main(argc, argv, &lfs_oper,NULL);
 }
 
