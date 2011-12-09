@@ -5,8 +5,8 @@
 
 
 struct segsum {
-	uint32_t inode_num;	// inode number of the file
-	uint32_t logical_blk;	// logical block number of the file
+	int32_t inode_num;	// inode number of the file
+	int32_t logical_blk;	// logical block number of the file
 };
 
 int get_next_free_segment();

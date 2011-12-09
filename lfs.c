@@ -15,15 +15,16 @@ void read_from_disc(int seg_num, int block_num, char *buf, int size, int blk_off
 
 void copy_segmentdata_to_disk(int fd, char * buf, size_t count, off_t offset )
 {
-
+	size_t ret;
 	struct segsum *ss = (struct segsum*)(li->cur_seg_buf);	
 	// if this is the last block in segment, write it into disc. 
 	if( li->cur_seg_blk == (SEG_SIZE / BLKSIZE)) 
 	{
-		pwrite(fd, buf, count, offset); 
+		ret = write(fd, buf, count); 
+		assert(ret == count);
 
 		// update the bitmap indicating that the segment is not free
-		li->seg_bitmap[li->log_head] = li->seg_bitmap[li->log_head] & ~(1 << li->log_head);
+		li->seg_bitmap[li->log_head] = 0;
 
 		li->log_head = get_next_free_segment();
 		li->cur_seg_blk = 0;
@@ -39,7 +40,7 @@ void copy_segmentdata_to_disk(int fd, char * buf, size_t count, off_t offset )
 }
 
 //get the file name from the path
-char* get_filename(char *path)
+char* get_filename(const char *path)
 {
         int pos = 0;
         char *filename,*p;
@@ -59,6 +60,7 @@ char* get_filename(char *path)
 // initialise all the global variables
 void lfs_init()
 {
+	int i;
 	li = (struct lfs_global_info*)malloc(sizeof(struct lfs_global_info));
 	//initialise global variables
 	li->cur_seg_buf    = malloc(SEG_SIZE);
@@ -74,9 +76,13 @@ void lfs_init()
 
 	li->fih 	   = NULL;
 	li->cur_seg_blk    = 1;
-	li->log_head	   = 1;
+	li->log_head	   = 0;
 	li->n_inode	   = 0;
-	li->seg_bitmap     = 0xffffffff;	
+
+	// allocate memory to bitmap and set all values as 1 indicating
+	// all free segments initiallly
+	for(i = 0; i< MAX_NUM_SEG; i++)
+		li->seg_bitmap[i] = 1;	
 
 	// create a file of required size on disk that needs to be used to 
 	// represent the lfs file system.	
@@ -95,6 +101,7 @@ static int lfs_getattr(const char *path, struct stat *stbuf)
 	int res = 0;
 	struct file_inode_hash *s;
 	char *p;
+
 	p = get_filename(path);
 	memset(stbuf, 0, sizeof(struct stat));
 	if (strcmp(path, "/") == 0) {
@@ -187,16 +194,7 @@ int lfs_create(const char *path, mode_t mode,struct fuse_file_info *fi)
 
 
 		// if the in-memory segment is full, write the data to disk
-		if ( li->cur_seg_blk == (SEG_SIZE / BLKSIZE))
-		{
-			pwrite(li->fd, li->cur_seg_buf, SEG_SIZE, li->log_head * SEG_SIZE + BLKSIZE);
-			
-			// set the segment as allocated in bitmap
-			li->seg_bitmap[li->log_head] = li->seg_bitmap[li->log_head] & ~(1 << li->log_head);
-
-			li->cur_seg_blk = 0;
-			li->log_head = (get_next_free_segment());
-		}
+                copy_segmentdata_to_disk(li->fd, li->cur_seg_buf, SEG_SIZE, li->log_head * SEG_SIZE + BLKSIZE); 		
 		
 		li->cur_seg_blk++;
 	}
@@ -292,12 +290,11 @@ int lfs_write(const char *path, char *buf, int count, int offset,struct fuse_fil
 	char *ibuf = malloc(BLKSIZE);	
 	struct inode *i;
 	struct segsum *ss = (struct segsum *) li->cur_seg_buf;
-	int pos,blk,segno;
+	int pos,blk,segno,j;
 	uint32_t ino, iaddr ,n;
-	
+	struct file_inode_hash *s;
+
 	// check if the file exists in hash table
-	struct file_inode_hash *s,*s1;
-	
 	HASH_FIND_STR(li->fih,get_filename(path),s);
 
 	// if given file is not present , return error	
@@ -327,7 +324,7 @@ int lfs_write(const char *path, char *buf, int count, int offset,struct fuse_fil
 		segno = i->direct[blk].seg_num;
 
 		// this block already exists		
-		if(segno != 65535)
+		if(segno != -1)
 		{	
 			// writing in continution of something already present
 			if( pos % BLKSIZE != 0 )
@@ -346,11 +343,11 @@ int lfs_write(const char *path, char *buf, int count, int offset,struct fuse_fil
 		}
 		
 		// update this block address in inode.
-		i->direct[blk].seg_num  = li-> log_head;
+		i->direct[blk].seg_num  = li->log_head;
 		i->direct[blk].blk_num = li->cur_seg_blk; 
 
 		// write n bytes into memory buffer  from given buffer buf.
-		memmove( li->cur_seg_buf + li->cur_seg_blk * BLKSIZE, buf, n); 
+		memmove( li->cur_seg_buf + (li->cur_seg_blk - 1) * BLKSIZE, buf, n); 
 
 		//update the summary
 		ss[li->cur_seg_blk].inode_num = ino;
@@ -359,11 +356,11 @@ int lfs_write(const char *path, char *buf, int count, int offset,struct fuse_fil
 		 // if this is last block in segment write the whole segment into disc.
 		copy_segmentdata_to_disk(li->fd, li->cur_seg_buf, SEG_SIZE, (li->log_head * SEG_SIZE + BLKSIZE));
 
-		li->cur_seg_blk ++; 		
+		li->cur_seg_blk++; 		
 		pos += n; // update pos.
 		buf += n;
 	}
-	memmove(li->cur_seg_buf + li->cur_seg_blk * BLKSIZE, ibuf, BLKSIZE);
+	memmove(li->cur_seg_buf + (li->cur_seg_blk - 1) * BLKSIZE, ibuf, BLKSIZE);
 	// update the inode map.
 	li->ino_map[ino].seg_num = li->log_head; 
 	li->ino_map[ino].blk_num = li->cur_seg_blk;
@@ -377,14 +374,16 @@ int lfs_write(const char *path, char *buf, int count, int offset,struct fuse_fil
 	li->cur_seg_blk ++; 	
 	
 	// update the hash information corresponding to the file
-	if(s->f_size != i->size) {
+	s->f_size = i->size;
+/*
 		s1 = (struct file_inode_hash*)malloc(sizeof(struct file_inode_hash));
 		s1->f_size = i->size;
-		strcpy(s1->f_name ,s->f_name);
+		s1->inode_num = s->inode_num;
+		strcpy(s1->f_name, s->f_name);
 		HASH_DEL(li->fih,s);
 		HASH_ADD_STR(li->fih,f_name,s1);
 	}
-	
+*/	
 	return count;
 }
 

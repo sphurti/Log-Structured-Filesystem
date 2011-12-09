@@ -9,7 +9,7 @@ int get_next_free_segment()
 
         for(i = 0; i < MAX_NUM_SEG ; i++) 
         {
-                if(li->seg_bitmap[i] & (1<<i))
+                if(li->seg_bitmap[i] == 1)
                 {
                         return i;
                 }

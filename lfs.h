@@ -13,16 +13,16 @@
 
 #define MAXNAMELEN	128
 #define BLKSIZE		4096
-#define SEG_SIZE	64*BLKSIZE	// size of segment in bytes
+#define SEG_SIZE	3*BLKSIZE	// size of segment in bytes
 #define MAX_SEG_BLKS	3		// maximum number of blocks per segment
-#define MAX_NUM_SEG     32		// maximum number of segements
+#define MAX_NUM_SEG     16		// maximum number of segements
 #define MAX_BLKS_FOR_FILE	1000	// Maximum number of blocks a file  can occupy
 #define MAX_INODES	1024
 
 #define MIN(a,b)	(a < b ? a : b)
 struct inode_map_entry {
-	uint16_t seg_num;
-	uint16_t blk_num;
+	int32_t seg_num;
+	int32_t blk_num;
 };
 
 
@@ -48,7 +48,7 @@ struct lfs_global_info {
 	// the rbtree for inode map entrees
 	struct inode_map_entry ino_map[MAX_INODES];
 	// segment bitmap
-	uint32_t *seg_bitmap;
+	uint16_t seg_bitmap[MAX_NUM_SEG];
 
 	// the file descriptor of the file representing the disk log
 	int fd;	 
@@ -68,7 +68,7 @@ int lfs_write(const char *path, char *buf, int count, int offset, struct fuse_fi
 // generic functions
 void read_from_disc(int seg_num, int block_num, char *buf, int size, int blk_offset);
 void copy_segmentdata_to_disk(int fd, char * buf, size_t count, off_t offset);
-char* get_filename(char *path);
+char* get_filename(const char *path);
 
 
 // other functions
