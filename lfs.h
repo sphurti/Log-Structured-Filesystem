@@ -16,7 +16,7 @@
 #define SEG_SIZE	3*BLKSIZE	// size of segment in bytes
 #define MAX_SEG_BLKS	3		// maximum number of blocks per segment
 #define MAX_NUM_SEG     16		// maximum number of segements
-#define MAX_BLKS_FOR_FILE	1000	// Maximum number of blocks a file  can occupy
+#define MAX_BLKS_FOR_FILE	500	// Maximum number of blocks a file  can occupy
 #define MAX_INODES	1024
 
 #define MIN(a,b)	(a < b ? a : b)

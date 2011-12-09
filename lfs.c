@@ -7,7 +7,7 @@ char* expected_open = NULL;
 
 void read_from_disc(int seg_num, int block_num, char *buf, int size, int blk_offset)
 {
-	int *offset;
+	int offset;
 	offset = seg_num * SEG_SIZE + block_num * BLKSIZE + BLKSIZE + blk_offset;
 	pread(li->fd, buf, size, offset);
 	return;
@@ -18,9 +18,9 @@ void copy_segmentdata_to_disk(int fd, char * buf, size_t count, off_t offset )
 	size_t ret;
 	struct segsum *ss = (struct segsum*)(li->cur_seg_buf);	
 	// if this is the last block in segment, write it into disc. 
-	if( li->cur_seg_blk == (SEG_SIZE / BLKSIZE)) 
+	if( li->cur_seg_blk == MAX_SEG_BLKS -1) 
 	{
-		ret = write(fd, buf, count); 
+		ret = pwrite(fd, buf, count, offset); 
 		assert(ret == count);
 
 		// update the bitmap indicating that the segment is not free
@@ -224,9 +224,10 @@ int lfs_read(const char *path, char *buf, size_t count, off_t offset, struct fus
 	int readbytes = 0;
 	uint32_t ino;
 	int pos,n,blk;
+	char *ibuf = malloc(BLKSIZE);
 
 	// check if the file exists in hash table
-	struct file_inode_hash *s;
+	struct file_inode_hash *s,*s1;
 	HASH_FIND_STR(li->fih,get_filename(path),s);
 
 	// if given file is not present , return error	
@@ -241,43 +242,36 @@ int lfs_read(const char *path, char *buf, size_t count, off_t offset, struct fus
 	// handle the case where inode is not  in memory buffer
 	if(li->ino_map[ino].seg_num != li->log_head)
 	{
-		 i = (struct inode *) ( li->ino_map[ino].seg_num * SEG_SIZE + li->ino_map[ino].blk_num * BLKSIZE + BLKSIZE);
-		
-		// return zero if the offset of file is greater then file size
-		if(offset >= i->size)
-			return 0;
-		count = MIN(count, i->size - offset);
-		blk = offset/BLKSIZE;
-		read_from_disc(i->direct[blk].seg_num, i->direct[blk].blk_num, buf, count, offset % BLKSIZE);
+		read_from_disc(li->ino_map[ino].seg_num, li->ino_map[ino].blk_num, ibuf, BLKSIZE, 0);
+		 i = (struct inode *) ibuf;
 	}
-
-	// handling the case when inode of the file being read is in memory buffer
+	
 	else
-	{
 		i = (struct inode *) (li->cur_seg_buf + li->ino_map[ino].blk_num * BLKSIZE);
-		if(offset  >=  i->size)
-			return 0;
 
-		count = MIN(count, i->size - offset);
-		for(pos = offset; pos < offset + count; )
-		{
-			n = MIN(BLKSIZE - pos % BLKSIZE, offset + count - pos);
-			blk = pos/BLKSIZE;
-			
-			/* if current  block is part of memory
-			    move the n byes of data starting from  appropriate 
-			    block into the buffer */
-			if(i->direct[blk].seg_num == li->log_head)
-				memmove(buf,  li->cur_seg_buf + i->direct[blk].blk_num * BLKSIZE+ pos % BLKSIZE, n);
-			
-			// if the current block is on disk, read the data from disk using read system call
-			else
-				read_from_disc(i->direct[blk].seg_num, i->direct[blk].blk_num, buf, n, pos % BLKSIZE);
+	if(offset  >=  i->size)
+		return 0;
 
-			pos += n;
-			buf += n;
-		}
+	count = MIN(count, i->size - offset);
+	for(pos = offset; pos < offset + count; )
+	{
+		n = MIN(BLKSIZE - pos % BLKSIZE, offset + count - pos);
+		blk = pos/BLKSIZE;
+			
+		/* if current  block is part of memory
+		    move the n byes of data starting from  appropriate 
+		    block into the buffer */
+		if(i->direct[blk].seg_num == li->log_head)
+			memmove(buf,  li->cur_seg_buf + i->direct[blk].blk_num * BLKSIZE+ pos % BLKSIZE, n);
+		
+		// if the current block is on disk, read the data from disk using read system call
+		else
+			read_from_disc(i->direct[blk].seg_num, i->direct[blk].blk_num, buf, n, pos % BLKSIZE);
+
+		pos += n;
+		buf += n;
 	}
+
 	return count;
 }
 
@@ -292,7 +286,7 @@ int lfs_write(const char *path, char *buf, int count, int offset,struct fuse_fil
 	struct segsum *ss = (struct segsum *) li->cur_seg_buf;
 	int pos,blk,segno,j;
 	uint32_t ino, iaddr ,n;
-	struct file_inode_hash *s;
+	struct file_inode_hash *s,*s1;
 
 	// check if the file exists in hash table
 	HASH_FIND_STR(li->fih,get_filename(path),s);
@@ -347,7 +341,7 @@ int lfs_write(const char *path, char *buf, int count, int offset,struct fuse_fil
 		i->direct[blk].blk_num = li->cur_seg_blk; 
 
 		// write n bytes into memory buffer  from given buffer buf.
-		memmove( li->cur_seg_buf + (li->cur_seg_blk - 1) * BLKSIZE, buf, n); 
+		memmove( li->cur_seg_buf + (li->cur_seg_blk ) * BLKSIZE, buf, n); 
 
 		//update the summary
 		ss[li->cur_seg_blk].inode_num = ino;
@@ -360,22 +354,32 @@ int lfs_write(const char *path, char *buf, int count, int offset,struct fuse_fil
 		pos += n; // update pos.
 		buf += n;
 	}
-	memmove(li->cur_seg_buf + (li->cur_seg_blk - 1) * BLKSIZE, ibuf, BLKSIZE);
-	// update the inode map.
-	li->ino_map[ino].seg_num = li->log_head; 
-	li->ino_map[ino].blk_num = li->cur_seg_blk;
 
-	//update segment summary for newly changes inode
-	ss[li->cur_seg_blk].inode_num = ino;
-	ss[li->cur_seg_blk].logical_blk = -1;
+	// If the inode to be updated is present in current memory segment
+	// move the updated inode info directly to that block
+	if(li->ino_map[ino].seg_num == li->log_head)
+		memmove(li->cur_seg_buf + li->ino_map[ino].blk_num * BLKSIZE, ibuf, BLKSIZE);
+
+	// If block containing indoe info was not part of current memory segment
+	// copy inode info into current segment and update the summary
+	else
+	{
+		memmove(li->cur_seg_buf + li->cur_seg_blk * BLKSIZE, ibuf, BLKSIZE);
+		// update the inode map.
+		li->ino_map[ino].seg_num = li->log_head; 
+		li->ino_map[ino].blk_num = li->cur_seg_blk;
+
+		//update segment summary for newly changes inode
+		ss[li->cur_seg_blk].inode_num = ino;
+		ss[li->cur_seg_blk].logical_blk = -1;
 
 	// if this is the last block in segment, write it into disc. 
-	copy_segmentdata_to_disk(li->fd, li->cur_seg_buf, SEG_SIZE,(li->log_head * SEG_SIZE + BLKSIZE));
-	li->cur_seg_blk ++; 	
-	
+		copy_segmentdata_to_disk(li->fd, li->cur_seg_buf, SEG_SIZE,(li->log_head * SEG_SIZE + BLKSIZE));
+		li->cur_seg_blk ++; 	
+	}
 	// update the hash information corresponding to the file
-	s->f_size = i->size;
-/*
+	//s->f_size = i->size;
+        if(s->f_size != i->size) {
 		s1 = (struct file_inode_hash*)malloc(sizeof(struct file_inode_hash));
 		s1->f_size = i->size;
 		s1->inode_num = s->inode_num;
@@ -383,7 +387,7 @@ int lfs_write(const char *path, char *buf, int count, int offset,struct fuse_fil
 		HASH_DEL(li->fih,s);
 		HASH_ADD_STR(li->fih,f_name,s1);
 	}
-*/	
+	
 	return count;
 }
 

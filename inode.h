@@ -5,8 +5,8 @@
 #include"lfs.h"
 
 struct direct_blk {
-	uint16_t seg_num;
-	uint16_t blk_num;
+	int32_t seg_num;
+	int32_t blk_num;
 };
 struct inode {
 	uint32_t ino;	// inode number
