@@ -84,6 +84,12 @@ void lfs_init()
 	for(i = 0; i< MAX_NUM_SEG; i++)
 		li->seg_bitmap[i] = 1;	
 
+	// initialize all the inode map entries to -1
+	for(i=0;i<MAX_INODES;i++)
+	{
+		li->ino_map[i].seg_num = -1;
+		li->ino_map[i].blk_num = -1;
+	}
 	// create a file of required size on disk that needs to be used to 
 	// represent the lfs file system.	
 	li->fd		 = open("./lfslog",O_RDWR|O_CREAT|O_TRUNC);
@@ -206,7 +212,6 @@ int lfs_create(const char *path, mode_t mode,struct fuse_file_info *fi)
 int lfs_open(const char *path, struct fuse_file_info *fi) 
 {
 
-	fprintf(stderr, "\ninside the open func");
 	struct file_inode_hash *s;
 	HASH_FIND_STR(li->fih,get_filename(path),s);
 	
@@ -217,7 +222,23 @@ int lfs_open(const char *path, struct fuse_file_info *fi)
 
 }
 
+int lfs_unlink(const char *path)
+{
+	int ino;
+	struct file_inode_hash *s;
+	HASH_FIND_STR(li->fih,get_filename(path),s);
+	
+	if(s == NULL)
+		return -1;
 
+	ino = s->inode_num;
+	li->ino_map[ino].seg_num = -1;
+	li->ino_map[ino].blk_num = -1;
+
+	HASH_DEL(li->fih,s);
+	return 0;
+}
+	
 int lfs_read(const char *path, char *buf, size_t count, off_t offset, struct fuse_file_info *fi)
 {
 	struct inode *i;
@@ -399,6 +420,7 @@ static struct fuse_operations lfs_oper = {
     .create	= lfs_create,
     .read	= lfs_read,
     .write	= lfs_write,
+    .unlink     = lfs_unlink,
 };
 
 int main(int argc, char *argv[])
