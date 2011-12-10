@@ -1,0 +1,75 @@
+					Log Structured File System
+
+What is it ?
+--------------
+
+We have implemented log structured file system at user level using FUSE (File system at User space). A Log Structured Filesystem is a technique for disk storage management in which all the file writes are written sequentially in a log-like structure.  A log consists of a series of segments where each segment contains both data and inode blocks. A log structured file system gathers a segment worth of data in memory and appends the segment at the end of the log. This improves the write performance while maintaining the same read performance.
+
+Documentation
+-------------------
+
+The detailed description of the project is provided in the file project_doc.txt
+
+
+Implementation:
+--------------------
+
+Installation of FUSE:
+--------------------------
+Before the compiling and running LFS, installation of FUSE is necessary. The FUSE version 26 has been used for our project. FUSE can be downloaded from the below link : 
+http://sourceforge.net/projects/fuse/files/fuse-2.X/
+
+Download fuse-2.8.6.tar.gz (505.3 kB) [ the latest version]
+ 
+FUSE installation :
+> ./configure
+>  make
+>  make install
+
+Compiling LFS:
+-------------------------------------
+The LFS filesystem is compiled by going into the src subdirectory and executing the command
+
+$ make
+
+Mounting the LFS :
+----------------------
+The LFS is mounted by running the command lfs from the src directory which takes the mountdir as the argument.
+
+$ mkdir /tmp/fuse
+$ ./lfs /tmp/fuse
+	
+	here /tmp/fuse represents the mountdir. The lfs command also creates file lfslog, a huge file that represents our filesystem . This file is created in the current directory, src directory.
+
+To unmount the filesystem , we need to execute the fusermount command with -u option.
+
+$ fusermount -u /tmp/fuse
+
+Running Testcases:
+-----------------------
+Once the filesystem is mounted using lfs command, the testcases can be run by executing the test_lfs command in src directory.
+
+$ gcc test_lfs.c -o test_lfs
+$ ./test_lfs
+	The output of the testcase execution are displayed on the screen.
+
+To rerun LFS:
+------------------
+
+- Unmount LFS, remove logfile, remove mountdir, create mountdir again.
+
+$ fusermount -u /tmp/fuse ;  rm -f ./lfslog ; \rm -rf /tmp/fuse ; mkdir /tmp/fuse
+
+$ ./lfs /tmp/fuse
+
+
+The description and testing of LFS and how to run the test cases, is specified in project_doc.txt. 
+
+Authors :
+------------
+
+Sphurti Sortur
+ID : 108305157
+
+Yasaswi Chamarthi
+ID : 108298510

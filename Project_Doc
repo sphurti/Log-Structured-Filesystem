@@ -1,0 +1,153 @@
+The Log Structured Filesystem designed by us use a huge file on disk as a log. After the filesystem is mounted  at a particular point. The files written there are actually written into 'log' and reading a file will read the data of the corresponding file from the 'log'.
+
+During implementation we assumed only files are present. The concept of directories can be added which is very similar to that of normal file system.
+
+
+Files and Naming Conventions:
+--------------------------------------------
+The code for the LFS consist of following src files
+
+1. Makefile :  Makefile is used to direct the compilation of the code.
+
+2. lfs.c and lfs.h :
+The code implementing the log structured filesystem is present in lfs.c. Every function defined in this file starts with lfs_. We have implement open,read,write,create,unlink,getattr and readdir functionalities.
+The file also contains a struct fuse_operations  named lfs_oper, containing pointers to the functions .
+The functions that are pointed to by fields in the struct fuse data structure all have names derived from their field names by prepending the standard bb_ prefix. So, for instance, the open() function is bb_open().
+
+3. inode.h, segment.h and segment.c
+These contain the declarations and definitions of structures that represent inode and segment summary along with the methods used to read and write segment to the log.
+
+4. cleaner.c and cleaner.h
+The cleaner function is invoked to reclaim the holes created in the log by compacting the live data and freeing segments that can be resused again.
+
+The detail explanation of the functionality of the methods implemented are given below.
+
+Implementation
+----------------------------
+The log consists of continuous segments each of SEG_SIZE. A segment is a set of blocks of BLKSIZE.
+The information about the LFS, like the superblock of a file system is maintained as a global information. 
+
+Global info : 
+- A hash table mapping filename to its corresponding inode and file size.
+- A buffer of SEG_SIZE (current segment buffer in memory) to collect data of segment size and write it to the log
+- The current block to be written in buffer
+- Number of inodes present in LFS
+- The log_head that specifies the segment number in the log to be written next
+- The inode map entries. Each entry specifies the segment number and the block number of the inode (index of ino_map)
+- An bitmap to indicate which segments in the log are free
+
+Inode consists of inode number, size of the file, and information of its direct blocks (segment and block numbers)
+
+The first block of every segment is segment summary giving information about each block in the segment whether a block is inode or data block. If it is a data block we store the corresponding indoe information to which it belongs.
+
+We have implemented the following file operations:
+open : lfs_open
+create : lfs_create
+write : lfs_write
+read : lfs_read
+unlink : lfs_unlink
+
+lfs_open performs the following operations :
+- If the specified file exists in the hash table returns 0 else return -1.
+
+lfs_create performs the following operations :
+- If the filename exists in the hash table simply return.
+- Else create a inode block in current segment buffer in memory and sets up the initial values of the inode.
+- Update the inode map and the segment summary to indicate the newly created inode.
+- If the current segment buffer in memory is full write the SEG_SIZE data into the log and update the bitmap.
+
+lfs_write performs the following operations :
+- If no file exists with the given filename in the hashtable, returns no entry.
+- If the inode of the file specified is not in current segment buffer in memory, read it from the log into a buffer as it has to be updated.
+- Write block wise into the current segment buffer in memory updating the inode in the memory and segment summary to reflect the changes.
+- If the current segment buffer is full ,write it to the log and update the bitmap.
+- After writing the specified number of bytes, if the previous inode is still in the current segment buffer in memory, over write it with the new inode. Else write the inode into a new block in current segment buffer in memory and update the inode map to reflect it.
+- Update the new file size in the hash table.
+- Return the number of bytes written.
+
+lfs_read performs the following operations :
+- If no file exists with the given filename in the hashtable, returns no entry.
+- If the specified number of bytes to read is more than the size of the file return 0.
+- If the inode is not the current segment buffer in memory, read it from log to know where the direct blocks of the inode are present.
+- From the inode, find if the block to be read is in log or in memory. 
+- If the block is in log, read the data from log into the buffer specified else read the block in memory into the buffer specified.
+- Return the number of bytes read.
+
+lfs_unlink performs the following operations : 
+- Look in the hashtable for the inode number corresponding to the filename specified.
+- Invalidate the inode entry in inode map to indicate it is removed.
+- Remove the entry from the hashtable.
+
+Cleaner:
+----------
+
+The LFS should have a few segments as free, MIN_FREE_SEG. If the number of free segments in the log drops below this value, the cleaner will be run to free some of the segments having dead blocks.
+
+Calculate the number of deadblocks in segment:
+For each block in the segment, 
+- Look into the segment summary of segment and find if its a inode block or data block. 
+- If it is an inode block, validate it with the inode entry . If invalid, update segment summary of that block, to indicate it as dead block.
+- If its a data block, validate it with the logical block (specified in segment summary) in inode. If invalid, mark it as dead block in segment summary.
+
+Cleaner program performs the following operations:
+- For every filled segment, calculate the number of deadblocks in that segment. 
+- If the number of deadblocks in the segment is greater than a threshold, the segment should be cleaned. 
+- Look at the segment summary of the segment to find the live blocks in the segment.
+- If the live block is an inode, copy it into current segment buffer in memory and update the inode map to reflect it.
+- If the live block is a data block of some inode, copy the inode and the data block into the current segment buffer in memory and update the inode map and inode to reflect the changes.
+- If the current segment buffer in memory is full ,write it to the log and update the bitmap. 
+- After all the live blocks of segment are copied, then mark the segment as free and update the bitmap accordingly.
+
+
+Testcases:
+---------------
+To test the working of LFS, the following testcases are used.
+
+Basic test for reading and writing to LFS:
+
+1. Verify that lfs is able to write files with fewer bytes of data ( around 160 bytes, less than block size) .
+2. Verify that lfs is able to write data more then a block size.
+3. Verify that lfs can write multiple blocks of data.
+4. Verify that lfs is able to update the exisiting file.
+5. Verify that lfs is able to write data which occupies more than a segment size.
+6. Verify the read functionality of lfs for all the above (1-5) testcases.
+7. Verify that lfs is able to delete the exisiting file.
+8. Verify that reading of non-existing file gives error.
+
+Testing for cleaner:
+-----------------------
+
+For testing the working of cleaner, 
+We decreased the number of blocks per segment to 6 and the number of segments in log to 8 and the number the minimum of number of free segments to 5, i.e., when the cleaner should be run.
+
+Steps in testing Cleaner:
+- Write a file of size 70 bytes.
+- Write a file of size 3096 bytes.
+- Delete (unlink) the first file. 
+- Write a file of size 5056 bytes. (So now the first seegment has 3 dead blocks). 
+- Write a file of size 9096 bytes.
+- Try writing another file of size 11096 bytes.
+
+In the middle of this write operation, we will come across a situation where the number of free segments in log is 5. So the cleaner is invoked.
+
+While doing gdb with break point at cleaner.c:58, it shows the following result for p *li:
+
+cur_seg_blk = 1, n_inode = 5, log_head = 3, ino_map = {{seg_num = -1, blk_num = -1}, {
+      seg_num = 0, blk_num = 3}, {seg_num = 1, blk_num = 2}, {seg_num = 2, blk_num = 1}, {
+      seg_num = 2, blk_num = 4}, {seg_num = -1, blk_num = -1} <repeats 1019 times>}, 
+  seg_bitmap = {0, 0, 0, 1, 1, 1, 1, 1}, threshold = 3, fd = 5}  
+
+Here the bitmap indicates the free segments present in the segment.
+
+After running the cleaner, in gdb p *li shows the following result:
+
+cur_seg_blk = 3, n_inode = 5, log_head = 3, ino_map = {{seg_num = -1, blk_num = -1}, {
+      seg_num = 3, blk_num = 1}, {seg_num = 1, blk_num = 2}, {seg_num = 2, blk_num = 1}, {
+      seg_num = 2, blk_num = 4}, {seg_num = -1, blk_num = -1} <repeats 1019 times>}, 
+  seg_bitmap = {1, 0, 0, 1, 1, 1, 1, 1}, threshold = 3, fd = 5}
+
+The cur_seg_blk is incremented by 2 showing that the live blocks in first segment have been moved into cur_seg_buf.
+The bitmap also indicates that the first segment as free.
+
+When the write operation is completed, we can read the files written already, which will give the data written into them showing that cleaner has cleaned the segments without changing the content of any file in the LFS.
+
