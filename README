@@ -16,7 +16,7 @@ Implementation:
 
 Installation of FUSE:
 --------------------------
-Before the compiling and running LFS, installation of FUSE is necessary. The FUSE version 26 has been used for our project. FUSE can be downloaded from the below link : 
+Before compiling and running LFS, installation of FUSE is necessary. The FUSE version 26 has been used for our project. FUSE can be downloaded from the below link : 
 http://sourceforge.net/projects/fuse/files/fuse-2.X/
 
 Download fuse-2.8.6.tar.gz (505.3 kB) [ the latest version]
@@ -31,7 +31,14 @@ FUSE installation :
 
 Compiling LFS:
 -------------------------------------
-The LFS filesystem is compiled by going into the src subdirectory and executing the command
+
+Clone the repository for LFS from the git-hub repo using the command 
+> git clone git://github.com/sphurti/Log-Structured-Filesystem.git
+
+Go to the downloaded directory  Log-Structured-Filesystem 
+> cd Log-Structured-Filesystem
+
+To compile the LFS filesystem, executing the command
 
 $ make
 
@@ -42,19 +49,17 @@ The LFS is mounted by running the command lfs from the src directory which takes
 $ mkdir /tmp/fuse
 $ ./lfs /tmp/fuse
 	
-	here /tmp/fuse represents the mountdir. The lfs command also creates file lfslog, a huge file that represents our filesystem . This file is created in the current directory, src directory.
-
-To unmount the filesystem , we need to execute the fusermount command with -u option.
-
-$ fusermount -u /tmp/fuse
+	Here /tmp/fuse represents the mountdir. The lfs command also creates file lfslog, a huge file that represents our filesystem . This file is created in the Log-Structured-Filesystem directory.
 
 Running Testcases:
 -----------------------
-Once the filesystem is mounted using lfs command, the testcases can be run by executing the test_lfs command in src directory.
+Once the filesystem is mounted using lfs command, the testcases can be run by executing the following command from the testcases directory of Log-Structured-Filesystem.
 
-$ gcc test_lfs.c -o test_lfs
-$ ./test_lfs
+$ make
+$ ./lfs_test
+
 	The output of the testcase execution are displayed on the screen.
+
 
 To rerun LFS:
 ------------------
