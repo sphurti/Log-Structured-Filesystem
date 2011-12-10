@@ -10,13 +10,7 @@ struct direct_blk {
 };
 struct inode {
 	uint32_t ino;	// inode number
-	uint32_t mode;	// 
 	uint32_t size;
-	uint32_t atime;
-	uint32_t mtime;
-	uint32_t dtime;
-	uint32_t link_cnt;
-	uint32_t block_cnt;
 	struct direct_blk direct[MAX_BLKS_FOR_FILE];
 };
 

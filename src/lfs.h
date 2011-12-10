@@ -19,7 +19,11 @@
 #define MAX_BLKS_FOR_FILE	500	// Maximum number of blocks a file  can occupy
 #define MAX_INODES	1024
 
+// the minimum number of deadblocks in the segment that should be present for cleaning
+#define THRESHOLD	(MAX_SEG_BLKS / 2)	
 #define MIN(a,b)	(a < b ? a : b)
+
+
 struct inode_map_entry {
 	int32_t seg_num;
 	int32_t blk_num;
@@ -71,7 +75,6 @@ int lfs_write(const char *path, char *buf, int count, int offset, struct fuse_fi
 char* get_filename(const char *path);
 
 
-// other functions
 
 
 #endif

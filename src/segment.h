@@ -12,7 +12,7 @@ struct segsum {
 int get_next_free_segment();
 int num_of_free_segments();
 
-void read_from_disc(int seg_num, int block_num, char *buf, int size, int blk_offset);
-void copy_segmentdata_to_disk(int fd, char * buf, size_t count, off_t offset);
+void read_from_log(int seg_num, int block_num, char *buf, int size, int blk_offset);
+void copy_segmentdata_to_log(int fd, char * buf, size_t count, off_t offset);
 
 #endif

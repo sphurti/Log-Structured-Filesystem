@@ -1,3 +1,4 @@
+#include<unistd.h>
 #include "segment.h"
 #include"lfs.h"
 
@@ -30,7 +31,7 @@ int num_of_free_segments()
 	return count;
 }
 
-void copy_segmentdata_to_disk(int fd, char * buf, size_t count, off_t offset )
+void copy_segmentdata_to_log(int fd, char * buf, size_t count, off_t offset )
 {
         size_t ret;
         struct segsum *ss = (struct segsum*)(li->cur_seg_buf);
@@ -64,7 +65,7 @@ void copy_segmentdata_to_disk(int fd, char * buf, size_t count, off_t offset )
 }
 
 
-void read_from_disc(int seg_num, int block_num, char *buf, int size, int blk_offset)
+void read_from_log(int seg_num, int block_num, char *buf, int size, int blk_offset)
 {
         int offset;
         offset = seg_num * SEG_SIZE + block_num * BLKSIZE + BLKSIZE + blk_offset;

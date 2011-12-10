@@ -29,7 +29,7 @@ void lfs_init()
 	li->cur_seg_blk    = 1;
 	li->log_head	   = 0;
 	li->n_inode	   = 0;
-	li->threshold	   = 2;
+	li->threshold	   = THRESHOLD;
 	// allocate memory to bitmap and set all values as 1 indicating
 	// all free segments initiallly
 	for(i = 0; i< MAX_NUM_SEG; i++)
@@ -168,7 +168,7 @@ int lfs_create(const char *path, mode_t mode,struct fuse_file_info *fi)
 
 
 		// if the in-memory segment is full, write the data to disk
-                copy_segmentdata_to_disk(li->fd, li->cur_seg_buf, SEG_SIZE, li->log_head * SEG_SIZE + BLKSIZE); 		
+                copy_segmentdata_to_log(li->fd, li->cur_seg_buf, SEG_SIZE, li->log_head * SEG_SIZE + BLKSIZE); 		
 		
 		li->cur_seg_blk++;
 	}
@@ -230,7 +230,7 @@ int lfs_read(const char *path, char *buf, size_t count, off_t offset, struct fus
 	// handle the case where inode is not  in memory buffer
 	if(li->ino_map[ino].seg_num != li->log_head)
 	{
-		read_from_disc(li->ino_map[ino].seg_num, li->ino_map[ino].blk_num, ibuf, BLKSIZE, 0);
+		read_from_log(li->ino_map[ino].seg_num, li->ino_map[ino].blk_num, ibuf, BLKSIZE, 0);
 		 i = (struct inode *) ibuf;
 	}
 	
@@ -254,7 +254,7 @@ int lfs_read(const char *path, char *buf, size_t count, off_t offset, struct fus
 		
 		// if the current block is on disk, read the data from disk using read system call
 		else
-			read_from_disc(i->direct[blk].seg_num, i->direct[blk].blk_num, buf, n, pos % BLKSIZE);
+			read_from_log(i->direct[blk].seg_num, i->direct[blk].blk_num, buf, n, pos % BLKSIZE);
 
 		pos += n;
 		buf += n;
@@ -288,7 +288,7 @@ int lfs_write(const char *path, char *buf, int count, int offset,struct fuse_fil
 		ino = s->inode_num;
 
 	if(li->ino_map[ino].seg_num != li->log_head)  
-		read_from_disc(li->ino_map[ino].seg_num, li->ino_map[ino].blk_num, ibuf, BLKSIZE, 0);
+		read_from_log(li->ino_map[ino].seg_num, li->ino_map[ino].blk_num, ibuf, BLKSIZE, 0);
 	else
 		memmove(ibuf,  li->cur_seg_buf  + li->ino_map[ino].blk_num * BLKSIZE, BLKSIZE);
 	
@@ -319,7 +319,7 @@ int lfs_write(const char *path, char *buf, int count, int offset,struct fuse_fil
 					continue;
   				}
 				else
-					read_from_disc(i->direct[blk].seg_num, i->direct[blk].blk_num, li->cur_seg_buf + li->cur_seg_blk*BLKSIZE, BLKSIZE, 0); 
+					read_from_log(i->direct[blk].seg_num, i->direct[blk].blk_num, li->cur_seg_buf + li->cur_seg_blk*BLKSIZE, BLKSIZE, 0); 
 			}
 			
 		}
@@ -335,8 +335,8 @@ int lfs_write(const char *path, char *buf, int count, int offset,struct fuse_fil
 		ss[li->cur_seg_blk].inode_num = ino;
 		ss[li->cur_seg_blk].logical_blk = blk; 
 
-		 // if this is last block in segment write the whole segment into disc.
-		copy_segmentdata_to_disk(li->fd, li->cur_seg_buf, SEG_SIZE, (li->log_head * SEG_SIZE + BLKSIZE));
+		 // if this is last block in segment write the whole segment into disk.
+		copy_segmentdata_to_log(li->fd, li->cur_seg_buf, SEG_SIZE, (li->log_head * SEG_SIZE + BLKSIZE));
 
 		li->cur_seg_blk++; 		
 		pos += n; // update pos.
@@ -361,8 +361,8 @@ int lfs_write(const char *path, char *buf, int count, int offset,struct fuse_fil
 		ss[li->cur_seg_blk].inode_num = ino;
 		ss[li->cur_seg_blk].logical_blk = -1;
 
-	// if this is the last block in segment, write it into disc. 
-		copy_segmentdata_to_disk(li->fd, li->cur_seg_buf, SEG_SIZE,(li->log_head * SEG_SIZE + BLKSIZE));
+	// if this is the last block in segment, write it into disk. 
+		copy_segmentdata_to_log(li->fd, li->cur_seg_buf, SEG_SIZE,(li->log_head * SEG_SIZE + BLKSIZE));
 		li->cur_seg_blk ++; 	
 	}
 	// update the hash information corresponding to the file

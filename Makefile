@@ -1,26 +1,15 @@
 CC     = gcc
 CFLAGS = -g -Wall -D_FILE_OFFSET_BITS=64 -DFUSE_USE_VERSION=26
 LFLAGS = -lfuse
-OBJS = segment.o inode.o lfs.o cleaner.o
+OBJS = src/segment.o src/inode.o src/lfs.o src/cleaner.o
 
 all: lfs
 
 lfs: $(OBJS)
 	$(CC) $(OBJS) -o lfs $(LFLAGS)
 
-segment.o: segment.c segment.h
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-inode.o: inode.c inode.h
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-lfs.o: lfs.c lfs.h
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-cleaner.o: cleaner.c cleaner.h
-	$(CC) $(CFLAGS) -c -o $@ $<
 clean:
-	rm -f lfs *.o
+	rm -f lfs src/*.o lfs_test
 
 # This is GNU makefile extension to notify that roughly means: 'clean' does
 # not depend on any files in order to call it.
