@@ -1,60 +1,11 @@
 #include"lfs.h"
 #include "inode.h"
+#include "cleaner.h"
+
 
 #define FUSE_USE_VERSION	26
 
 char* expected_open = NULL;
-
-void read_from_disc(int seg_num, int block_num, char *buf, int size, int blk_offset)
-{
-	int offset;
-	offset = seg_num * SEG_SIZE + block_num * BLKSIZE + BLKSIZE + blk_offset;
-	pread(li->fd, buf, size, offset);
-	return;
-}
-
-void copy_segmentdata_to_disk(int fd, char * buf, size_t count, off_t offset )
-{
-	size_t ret;
-	struct segsum *ss = (struct segsum*)(li->cur_seg_buf);	
-	// if this is the last block in segment, write it into disc. 
-	if( li->cur_seg_blk == MAX_SEG_BLKS -1) 
-	{
-		ret = pwrite(fd, buf, count, offset); 
-		assert(ret == count);
-
-		// update the bitmap indicating that the segment is not free
-		li->seg_bitmap[li->log_head] = 0;
-
-		li->log_head = get_next_free_segment();
-		li->cur_seg_blk = 0;
-
-		// reset the memory buffer to zer0
-		memset((void*)li->cur_seg_buf,0,SEG_SIZE);
-
-		// resetting values for the segment summary entry for new segment
-		ss[0].inode_num = -1;
-		ss[0].logical_blk = -1;
-	}
-	return;
-}
-
-//get the file name from the path
-char* get_filename(const char *path)
-{
-        int pos = 0;
-        char *filename,*p;
-        p = path;
-
-        while(*p != '\0') {
-                p++;
-        }
-
-        while(*p != '/')
-                p--;
-        p++;
-        return p;
-}
 
 
 // initialise all the global variables
@@ -78,7 +29,7 @@ void lfs_init()
 	li->cur_seg_blk    = 1;
 	li->log_head	   = 0;
 	li->n_inode	   = 0;
-
+	li->threshold	   = 2;
 	// allocate memory to bitmap and set all values as 1 indicating
 	// all free segments initiallly
 	for(i = 0; i< MAX_NUM_SEG; i++)
@@ -101,6 +52,24 @@ void lfs_init()
 	pwrite(li->fd, buf, file_size,0);
 	free(buf);
 }
+
+//get the file name from the path
+char* get_filename(const char *path)
+{
+        int pos = 0;
+        char *filename,*p;
+        p = path;
+
+        while(*p != '\0') {
+                p++;
+        }
+
+        while(*p != '/')
+                p--;
+        p++;
+        return p;
+}
+
 
 static int lfs_getattr(const char *path, struct stat *stbuf)
 {

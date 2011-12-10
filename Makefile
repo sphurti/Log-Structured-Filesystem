@@ -1,7 +1,7 @@
 CC     = gcc
 CFLAGS = -g -Wall -D_FILE_OFFSET_BITS=64 -DFUSE_USE_VERSION=26
 LFLAGS = -lfuse
-OBJS = segment.o  inode.o lfs.o
+OBJS = segment.o inode.o lfs.o cleaner.o
 
 all: lfs
 
@@ -17,6 +17,8 @@ inode.o: inode.c inode.h
 lfs.o: lfs.c lfs.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+cleaner.o: cleaner.c cleaner.h
+	$(CC) $(CFLAGS) -c -o $@ $<
 clean:
 	rm -f lfs *.o
 
