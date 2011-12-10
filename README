@@ -20,6 +20,9 @@ Before the compiling and running LFS, installation of FUSE is necessary. The FUS
 http://sourceforge.net/projects/fuse/files/fuse-2.X/
 
 Download fuse-2.8.6.tar.gz (505.3 kB) [ the latest version]
+
+Uncompress the fuse-2.8.6.tar.gz using the command 
+> tar -xvf fuse-2.8.6.tar.gz
  
 FUSE installation :
 > ./configure
