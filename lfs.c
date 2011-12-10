@@ -56,8 +56,7 @@ void lfs_init()
 //get the file name from the path
 char* get_filename(const char *path)
 {
-        int pos = 0;
-        char *filename,*p;
+        char *p;
         p = path;
 
         while(*p != '\0') {
@@ -211,13 +210,12 @@ int lfs_unlink(const char *path)
 int lfs_read(const char *path, char *buf, size_t count, off_t offset, struct fuse_file_info *fi)
 {
 	struct inode *i;
-	int readbytes = 0;
 	uint32_t ino;
 	int pos,n,blk;
 	char *ibuf = malloc(BLKSIZE);
 
 	// check if the file exists in hash table
-	struct file_inode_hash *s,*s1;
+	struct file_inode_hash *s;
 	HASH_FIND_STR(li->fih,get_filename(path),s);
 
 	// if given file is not present , return error	
@@ -274,8 +272,8 @@ int lfs_write(const char *path, char *buf, int count, int offset,struct fuse_fil
 	char *ibuf = malloc(BLKSIZE);	
 	struct inode *i;
 	struct segsum *ss = (struct segsum *) li->cur_seg_buf;
-	int pos,blk,segno,j;
-	uint32_t ino, iaddr ,n;
+	int pos,blk,segno;
+	uint32_t ino, n;
 	struct file_inode_hash *s,*s1;
 
 	// check if the file exists in hash table
@@ -396,8 +394,6 @@ int main(int argc, char *argv[])
 {
     lfs_init();
      
-    fprintf(stderr, "\ninside the main func");
-    fprintf(stderr, "\n%08x",li->cur_seg_buf);    
     return fuse_main(argc, argv, &lfs_oper,NULL);
 }
 

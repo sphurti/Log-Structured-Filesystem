@@ -13,9 +13,9 @@
 
 #define MAXNAMELEN	128
 #define BLKSIZE		4096
-#define SEG_SIZE	4*BLKSIZE	// size of segment in bytes
-#define MAX_SEG_BLKS	4		// maximum number of blocks per segment
-#define MAX_NUM_SEG     10		// maximum number of segements
+#define SEG_SIZE	6*BLKSIZE	// size of segment in bytes
+#define MAX_SEG_BLKS	6		// maximum number of blocks per segment
+#define MAX_NUM_SEG     8		// maximum number of segements
 #define MAX_BLKS_FOR_FILE	500	// Maximum number of blocks a file  can occupy
 #define MAX_INODES	1024
 

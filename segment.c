@@ -46,7 +46,10 @@ void copy_segmentdata_to_disk(int fd, char * buf, size_t count, off_t offset )
                 li->log_head = get_next_free_segment();
 		
 		if(num_of_free_segments() <= 5)
+		{
+			li->cur_seg_blk = 1;
 			lfs_clean();
+		}
 
                 li->cur_seg_blk = 0;
 
