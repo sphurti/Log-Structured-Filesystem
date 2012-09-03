@@ -2,17 +2,26 @@
 
 What is it ?
 --------------
+ A Log Structured Filesystem is a technique for disk storage management in which all the file writes are written sequentially in a log-like structure.  A log consists of a series of segments where each segment contains both data and inode blocks. A log structured file system gathers a segment worth of data in memory and appends the segment at the end of the log. This improves the write performance while maintaining the same read performance.
 
-We have implemented log structured file system at user level using FUSE (File system at User space). A Log Structured Filesystem is a technique for disk storage management in which all the file writes are written sequentially in a log-like structure.  A log consists of a series of segments where each segment contains both data and inode blocks. A log structured file system gathers a segment worth of data in memory and appends the segment at the end of the log. This improves the write performance while maintaining the same read performance.
-
-Documentation
--------------------
-
-The detailed description of the project is provided in the file project_doc.txt
+This has been implemented at user level using FUSE(Filesystem at User Space).This basic implementation of LFS creates only files. The concept of directories can be added which is very similar to that of normal file system.
 
 
-Implementation:
---------------------
+Files and Naming Conventions:
+--------------------------------------------
+The code for the LFS consist of following src files
+
+1. Makefile :  Makefile is used to direct the compilation of the code.
+
+2. lfs.c and lfs.h :
+The code implementing the log structured filesystem is present in lfs.c. Every function defined in this file starts with lfs_. The open,read,write,create,unlink,getattr and readdir functionalities have been implemented.
+
+3. inode.h, segment.h and segment.c
+These contain the declarations and definitions of structures that represent inode and segment summary along with the methods used to read and write segment to the log.
+
+4. cleaner.c and cleaner.h
+The cleaner function is invoked to reclaim the holes created in the log by compacting the live data and freeing segments that can be resused again.
+
 
 Installation of FUSE:
 --------------------------
@@ -71,13 +80,8 @@ $ fusermount -u /tmp/fuse ;  rm -f ./lfslog ; \rm -rf /tmp/fuse ; mkdir /tmp/fus
 $ ./lfs /tmp/fuse
 
 
-The description and testing of LFS and how to run the test cases, is specified in project_doc.txt. 
 
-Authors :
+Author :
 ------------
 
 Sphurti Sortur
-ID : 108305157
-
-Yasaswi Chamarthi
-ID : 108298510
